@@ -1,0 +1,65 @@
+﻿$ErrorActionPreference = 'Continue'
+Set-Location -LiteralPath (Join-Path $PSScriptRoot '..')
+
+function Wait-Cn { [void](Read-Host '按回车键返回工具栏') }
+function Get-Python { Join-Path (Get-Location) '.venv\Scripts\python.exe' }
+function Require-Python {
+    $python = Get-Python
+    if (-not (Test-Path -LiteralPath $python)) {
+        Write-Host '未找到虚拟环境，请先选择“安装/更新运行环境”。' -ForegroundColor Yellow
+        Wait-Cn
+        return $null
+    }
+    return $python
+}
+function Run-Python([string]$Script, [string[]]$Arguments) {
+    $python = Require-Python
+    if ($null -ne $python) { & $python $Script @Arguments; Wait-Cn }
+}
+function Show-Menu {
+    Clear-Host
+    Write-Host '========================================'
+    Write-Host '        直播监控工具栏'
+    Write-Host '========================================'
+    Write-Host '  1. 安装/更新运行环境'
+    Write-Host '  2. 安装 CUDA 加速组件'
+    Write-Host '  3. 登录抖音（扫码）'
+    Write-Host '  4. 打开状态窗口'
+    Write-Host '  5. 检查配置和运行环境'
+    Write-Host '  6. 运行离线模拟'
+    Write-Host '  7. 运行日终摘要模拟'
+    Write-Host '  8. 查看最近日志'
+    Write-Host '  9. 退出'
+    Write-Host '========================================'
+}
+
+while ($true) {
+    Show-Menu
+    $choice = Read-Host '请选择 [1-9]'
+    if ([string]::IsNullOrWhiteSpace($choice)) { break }
+    switch ($choice) {
+        '1' {
+            $python = Get-Python
+            if (-not (Test-Path -LiteralPath $python)) {
+                py -3.12 -m venv .venv 2>$null
+                if (-not (Test-Path -LiteralPath $python)) { py -3.11 -m venv .venv 2>$null }
+            }
+            if (Test-Path -LiteralPath $python) {
+                & $python -m pip install --upgrade pip
+                & $python -m pip install -r requirements.txt
+                & $python -m playwright install chromium
+                Write-Host '运行环境安装完成。' -ForegroundColor Green
+            } else { Write-Host '未找到 Python 3.11 或 3.12。' -ForegroundColor Red }
+            Wait-Cn
+        }
+        '2' { $python = Require-Python; if ($null -ne $python) { & $python -m pip install --upgrade 'nvidia-cublas-cu12>=12' 'nvidia-cudnn-cu12>=9'; Wait-Cn } }
+        '3' { Run-Python 'scripts\douyin_login.py' @() }
+        '4' { $python = Require-Python; if ($null -ne $python) { $pythonw = Join-Path (Get-Location) '.venv\Scripts\pythonw.exe'; if (Test-Path $pythonw) { Start-Process $pythonw -ArgumentList 'scripts\status_window.py' } else { Start-Process $python -ArgumentList 'scripts\status_window.py' } } }
+        '5' { Run-Python 'scripts\check_config.py' @() }
+        '6' { Run-Python 'scripts\simulate.py' @('--dry-run','--no-push') }
+        '7' { Run-Python 'scripts\daily_summary.py' @('--dry-run','--simulate','--no-push') }
+        '8' { if (Test-Path -LiteralPath 'logs') { Get-ChildItem logs -File -Recurse | Sort-Object LastWriteTime -Descending | Select-Object -First 20 | Format-Table LastWriteTime,FullName -AutoSize } else { Write-Host '日志目录不存在。' }; Wait-Cn }
+        '9' { break }
+        default { Write-Host '无效选择，请输入 1 到 9。' -ForegroundColor Yellow; Start-Sleep -Milliseconds 700 }
+    }
+}
