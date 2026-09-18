@@ -1,12 +1,10 @@
-﻿{
+{
   "project": "finance-live-watcher",
   "tools": {
-    "ffmpeg": "C:/Users/Yule2/AppData/Local/Microsoft/WinGet/Packages/Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe/ffmpeg-9.0.1-full_build/bin/ffmpeg.exe",
-    "ffprobe": "C:/Users/Yule2/AppData/Local/Microsoft/WinGet/Packages/Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe/ffmpeg-9.0.1-full_build/bin/ffprobe.exe",
-    "lark_cli": "C:/Users/Yule2/AppData/Local/Doubao/User Data/Default/sandbox_envs_dir/envs/8ab491e9-8e4f-4b5c-9e50-92bdf33521b9/override_dlcs/lark-cli.exe"
+    "ffmpeg": "ffmpeg",
+    "ffprobe": "ffprobe"
   },
-  "feishu_webhook": "https://open.feishu.cn/open-apis/bot/v2/hook/<YOUR_WEBHOOK_TOKEN>",
-  "feishu_webhook_note": "飞书自定义群机器人 Webhook（已配置）",
+  "feishu_webhook": "",
   "record": {
     "sample_rate": 16000,
     "channels": 1,
@@ -15,44 +13,22 @@
     "rw_timeout_us": 20000000,
     "reconnect_max": 5
   },
-  "transcribe": {
-    "poll_interval_s": 15,
-    "poll_max_times": 40
-  },
   "retention_days": 7,
   "anchors": [
     {
-      "id": "douyin_caicaishuo",
+      "id": "douyin_example",
       "platform": "douyin",
-      "name": "股市才才说",
-      "credential": "江海证券投资顾问",
-      "douyin_id": "30642358441",
-      "sec_uid": "MS4wLjABAAAA5vRhYjY2XGcOhPXQ9DPiBF-sbRRk2R5sOnlTbC8GLRVo6R_mdWQ-_khuSPz6P_VX",
-      "web_rid": "",
-      "schedule_hint": "用户标注约21:00（主页未写明，待确认）",
-      "poll_windows": [["20:30", "22:30"]]
+      "name": "抖音主播示例",
+      "sec_uid": "替换为主播的 sec_uid",
+      "poll_windows": [["19:00", "22:00"]]
     },
     {
-      "id": "douyin_wending",
-      "platform": "douyin",
-      "name": "文鼎（文说股市）",
-      "credential": "利多星证券投资顾问",
-      "douyin_id": "95892981226",
-      "sec_uid": "MS4wLjABAAAAL_p5dizu5Fh-nc-u6ViPLZAk72Hea8StZfH2Ck-s-ND0eRfuF9KnGlqQ8ek1ng35",
-      "web_rid": "",
-      "schedule_hint": "主页写明：早7:30、晚19:30、周日10:00",
-      "poll_windows": [["07:00", "09:00"], ["19:00", "21:00"]]
-    },
-    {
-      "id": "bili_luojige",
+      "id": "bilibili_example",
       "platform": "bilibili",
-      "name": "逻辑哥复盘笔记",
-      "credential": "",
-      "mid": "433280310",
-      "room_id": "1785947366",
-      "schedule_hint": "标题显示下午看盘，晚间是否播待确认",
+      "name": "B站主播示例",
+      "mid": "替换为用户 mid",
+      "room_id": "替换为直播间 room_id",
       "poll_windows": [["13:00", "22:30"]]
     }
   ]
 }
-

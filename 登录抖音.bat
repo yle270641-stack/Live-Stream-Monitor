@@ -1,5 +1,10 @@
 @echo off
 setlocal
 cd /d "%~dp0"
-"%~dp0.venv\Scripts\python.exe" scripts\douyin_login.py
+if not exist ".venv\Scripts\python.exe" (
+  echo Missing Python environment. Run Toolbox first.
+  pause
+  exit /b 1
+)
+".venv\Scripts\python.exe" scripts\douyin_login.py
 if errorlevel 1 pause

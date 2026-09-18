@@ -16,3 +16,12 @@ browser_profile/
 # 密钥 / 真实配置（anchors.json 含飞书 webhook，用 anchors.example.json 做模板）
 .env
 config/anchors.json
+
+# Test and editor artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+.idea/
+.vscode/
+*.bak
+*.tmp

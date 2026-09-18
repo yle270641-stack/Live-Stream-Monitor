@@ -1,75 +1,90 @@
 # 直播监控
 
-这是一个在 Windows 本机运行的财经直播摘要工具。它在配置的时段检查直播，录制音频，转成逐字稿，生成五段式摘要，然后推送至飞书。
+一个在 Windows 本机运行的直播音频监控与摘要工具。它可按时间窗口检查抖音和 Bilibili 直播，使用 FFmpeg 录制音频，通过 faster-whisper 本地转写，调用 OpenAI 兼容接口生成摘要，并可推送到飞书群机器人。
 
-当前 B 站可直接工作。抖音通过本机 Playwright 浏览器检测开播并捕获播放器真实请求的短期 FLV 地址；登录过期时需重新扫码。
+> 本项目仅用于处理你有权访问和录制的内容。使用前请遵守直播平台条款、著作权规则和所在地法律。生成的财经摘要仅作客观转述，不构成投资建议。
 
-## 一键启动
+## 功能
 
-首次使用，按下面顺序操作：
+- Bilibili 无登录开播检测与取流
+- 抖音 Playwright 本地登录、开播检测与临时流地址捕获
+- FFmpeg 分段录音，支持断流恢复和 `F9` 提前结束当前片段
+- faster-whisper 本地转写，音频无需上传到第三方 ASR
+- OpenAI 兼容接口生成五段式摘要，无 Key 时生成保守摘录
+- 飞书机器人推送、失败重试、运行心跳和本地产物清理
 
-1. 双击 `工具箱.bat`，选择 `1. 安装依赖`（安装 Playwright 与 Chromium）。如有 NVIDIA GPU，再选 `2. 安装 CUDA 依赖` 可加速本地转写。
-2. 双击 `登录抖音.bat`：会打开抖音页面，用手机抖音扫描页面二维码。登录成功后直接关闭窗口即可，登录态仅保存在本机 `browser_profile/douyin`。
-3. 双击 `启动直播监控.bat`：启动常驻监控。窗口需保持打开。
+## 环境要求
 
-日常使用只需双击 `启动直播监控.bat`。抖音登录过期时双击 `登录抖音.bat` 重新扫码。其他不常用操作（安装依赖、安装 CUDA、查看状态浮窗）都收在 `工具箱.bat` 里。
+- Windows 10/11
+- Python 3.11 或 3.12
+- FFmpeg 和 FFprobe（可通过 `winget install Gyan.FFmpeg` 安装）
+- 抖音功能需要 Playwright 浏览器和一次手机扫码登录
+- 可选：NVIDIA GPU，用于加速 faster-whisper
 
-抖音登录过期时，再次双击 `登录抖音.bat` 扫码即可。程序不会读取、导出或上传 Cookie、密码或浏览器 profile。
-
-可在主播开播时手工确认抖音取流是否正常：
+## 快速开始
 
 ```powershell
-python scripts/douyin_live.py stream --anchor douyin_wending
+git clone <你的仓库地址>
+cd <仓库目录>
+Copy-Item config/anchors.example.json config/anchors.json
+Copy-Item .env.example .env
 ```
 
-不连接真实直播的安全模拟：
+编辑 `config/anchors.json`，替换示例主播的 `sec_uid`、`mid`、`room_id` 和监控时间段。敏感值写入 `.env`，不要写进示例配置或提交到 Git。
+
+随后双击 `工具箱.bat`：
+
+1. 选择 `1` 创建虚拟环境并安装依赖。
+2. 如使用 NVIDIA GPU，可选择 `2` 安装 CUDA Python 运行库，并在 `.env` 设置 `WHISPER_DEVICE=cuda`、`WHISPER_COMPUTE_TYPE=float16`。
+3. 使用抖音时选择 `3`，扫码登录后关闭浏览器。
+4. 双击 `启动直播监控.bat` 启动常驻监控。
+
+也可以直接运行：
 
 ```powershell
-python scripts/simulate.py
+.\.venv\Scripts\python.exe scripts\watcher.py --once
+.\.venv\Scripts\python.exe scripts\simulate.py
+.\.venv\Scripts\python.exe scripts\watcher.py --daemon
 ```
+
+`--once` 只检查一轮；`simulate.py` 不连接直播、不推送飞书，适合验证摘要配置；`--daemon` 启动常驻监控。
 
 ## 配置
 
-真实配置为 `config/anchors.json`，其中包含飞书 Webhook，不能提交到 Git。模型配置写在项目根目录的 `.env` 文件中：
+真实配置文件为 `config/anchors.json`，格式参考 `config/anchors.example.json`。`tools.ffmpeg` 和 `tools.ffprobe` 默认从 `PATH` 解析，也可以改为本机绝对路径。
 
-```text
-LLM_API_KEY=你的中转站Key
-LLM_MODEL=模型名称
-LLM_BASE_URL=https://你的中转站地址/
-```
+常用环境变量：
 
-Portdan 可填写 `https://portdan.com/`；程序会自动补上 `/v1/chat/completions`。模型名称必须使用 Portdan 控制台中显示的可用模型名。
+| 变量 | 用途 | 默认值 |
+| --- | --- | --- |
+| `LLM_API_KEY` | OpenAI 兼容接口密钥 | 空，使用本地摘录 |
+| `LLM_BASE_URL` | Chat Completions 接口或 API 根地址 | OpenAI 接口 |
+| `LLM_MODEL` | 摘要模型名 | `gpt-4o-mini` |
+| `FEISHU_WEBHOOK` | 飞书自定义机器人 Webhook | 空，不推送 |
+| `WHISPER_MODEL` | faster-whisper 模型 | `small` |
+| `WHISPER_DEVICE` | `cpu` 或 `cuda` | `cpu` |
+| `CLEANUP_AFTER_PUSH` | 推送成功后删除录音和逐字稿 | `true` |
 
-转写默认使用本地 `faster-whisper`，音频不会上传飞书；首次运行会下载模型。当前已默认配置为 NVIDIA CUDA 的 `float16` 模式。首次使用前运行 `安装CUDA依赖.bat` 安装 CUDA 运行库。可在 `.env` 调整 `WHISPER_MODEL`：`tiny` 约 150 MB、`small` 约 500 MB、`medium` 约 1.5 GB。旧的 `lark-cli` 配置仅保留作备用，不再是必需条件。
+环境变量优先于配置文件中的飞书 Webhook。`.env`、真实主播配置、浏览器登录态、录音、逐字稿和日志均已被 `.gitignore` 排除。
 
-程序会自动读取 `.env`；也支持用 PowerShell 环境变量覆盖它。
+## 数据目录
 
-没有配置 `LLM_API_KEY` 时，程序仍会生成保守的逐字稿摘录，但不会假装它是模型摘要。
+- `recordings/`：直播录音
+- `transcripts/`：逐字稿与摘要
+- `logs/`：运行状态、错误和待推送内容
+- `browser_profile/`：抖音本地登录态
 
-## 运行
+以上目录可能含敏感内容，不应提交或分享。默认保留期由 `retention_days` 控制。
 
-先做一次不录制的窗口检查：
-
-```powershell
-python scripts/watcher.py --once
-```
-
-对当前在播的 B 站主播做 30 秒端到端测试：
-
-```powershell
-python scripts/watcher.py --once --max-seconds 30
-```
-
-常驻运行（未开播时默认每 120 秒轮询一次）：
+## 开发验证
 
 ```powershell
-python scripts/watcher.py --daemon
+.\.venv\Scripts\python.exe -m compileall -q scripts tests
+.\.venv\Scripts\python.exe -m unittest discover -s tests -v
 ```
 
-正式运行不传 `--max-seconds`，每位主播按 30 分钟一段录制；每段完成后独立转写、摘要并单独推送到飞书，不同主播不会混在一起。直播未结束时也会持续收到每段摘要，直播结束后不会凭空补写没有录到的内容。常驻模式还会立即并每 30 分钟推送一条运行状态消息；异常时标题会改为“部分异常”。失败任务会退避后重试，避免每轮重复录制。状态保存在 `logs/state.json`。建议用 Windows 任务计划程序在登录时运行上述常驻命令。
+GitHub Actions 会在 Python 3.11 和 3.12 上执行同样的静态编译与单元测试。
 
-监控运行期间按 `F9`，会立即结束当前正在录音的主播片段，转写并生成“即时摘要”推送到飞书；没有正在录音的主播时按键不会生成空摘要。
+## 许可证
 
-## 依赖和限制
-
-录音、B 站查询、飞书推送和本地转写均已接入；首次使用本地 ASR 时需要下载模型，并需要预留 CPU 时间和磁盘空间。
+[MIT License](LICENSE)

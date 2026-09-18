@@ -26,8 +26,18 @@ def ensure_dirs():
 
 def load_config():
     load_dotenv()
+    if not CONFIG_PATH.exists():
+        raise FileNotFoundError(
+            "缺少 config/anchors.json；请复制 config/anchors.example.json 后填写配置。"
+        )
     with open(CONFIG_PATH, "r", encoding="utf-8") as f:
-        return json.load(f)
+        config = json.load(f)
+    if not isinstance(config.get("anchors"), list):
+        raise ValueError("config/anchors.json 中的 anchors 必须是列表。")
+    webhook = os.getenv("FEISHU_WEBHOOK", "").strip()
+    if webhook:
+        config["feishu_webhook"] = webhook
+    return config
 
 
 def load_dotenv():
