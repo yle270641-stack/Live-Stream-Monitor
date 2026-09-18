@@ -12,7 +12,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-from common import ROOT, ensure_dirs, load_config, load_dotenv, log
+from common import ROOT, configure_utf8_stdio, ensure_dirs, load_config, load_dotenv, log
 from summarize import api_summary
 
 STATE_PATH = ROOT / "logs" / "daily_summary_state.json"
@@ -225,6 +225,7 @@ def scheduler(cfg, stop, push_callback=None, interval=30):
 
 
 def main():
+    configure_utf8_stdio()
     ap = argparse.ArgumentParser()
     ap.add_argument("--date", default="")
     ap.add_argument("--dry-run", action="store_true", help="生成文件但不调用模型/飞书")

@@ -14,7 +14,7 @@ from pathlib import Path
 sys.stdout.reconfigure(encoding="utf-8")
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from common import ROOT
+from common import ROOT, configure_utf8_stdio
 from summarize import load_dotenv, summarize_text
 
 TRANSCRIPTS = ROOT / "transcripts"
@@ -38,6 +38,7 @@ def find_missing():
 
 
 def main():
+    configure_utf8_stdio()
     load_dotenv()
     for round_no in range(1, MAX_ROUNDS + 1):
         missing = find_missing()

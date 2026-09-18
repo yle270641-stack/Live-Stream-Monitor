@@ -9,6 +9,7 @@ import argparse
 import json
 import os
 from datetime import datetime
+from pathlib import Path
 from common import ROOT, configure_utf8_stdio, load_dotenv
 from summarize import summarize_text
 
@@ -24,15 +25,20 @@ def main():
     configure_utf8_stdio()
     ap = argparse.ArgumentParser()
     ap.add_argument("--keep-transcript", action="store_true")
+    ap.add_argument("--output-dir", default="",
+                    help="模拟产物目录，默认使用 logs/simulation")
     ap.add_argument("--use-llm", action="store_true",
                     help="允许把内置虚构逐字稿发送到已配置的 LLM 接口")
     args = ap.parse_args()
     load_dotenv()
     if not args.use_llm:
         os.environ.pop("LLM_API_KEY", None)
-    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    transcript = ROOT / "transcripts" / f"simulation_{stamp}.txt"
-    summary = ROOT / "logs" / f"simulation_{stamp}_summary.txt"
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    output_dir = Path(args.output_dir) if args.output_dir else ROOT / "logs" / "simulation"
+    if not output_dir.is_absolute():
+        output_dir = (ROOT / output_dir).resolve()
+    transcript = output_dir / f"simulation_{stamp}.txt"
+    summary = output_dir / f"simulation_{stamp}.summary.txt"
     transcript.parent.mkdir(parents=True, exist_ok=True)
     summary.parent.mkdir(parents=True, exist_ok=True)
     transcript.write_text(FIXTURE, encoding="utf-8")
@@ -41,7 +47,7 @@ def main():
     if not args.keep_transcript:
         transcript.unlink(missing_ok=True)
     print(json.dumps({"ok": True, "mode": "llm" if args.use_llm else "offline",
-                      "summary_path": str(summary),
+                      "summary_path": str(summary), "output_dir": str(output_dir),
                       "transcript_kept": args.keep_transcript}, ensure_ascii=False, indent=2))
     print("\n" + result)
 

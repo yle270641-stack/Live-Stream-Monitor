@@ -49,7 +49,7 @@ Copy-Item .env.example .env
 .\.venv\Scripts\python.exe scripts\watcher.py --daemon
 ```
 
-`--once` 只检查一轮；`simulate.py` 默认完全离线，不连接直播、不调用模型、不推送飞书。需要验证模型接口时显式运行 `simulate.py --use-llm`；`--daemon` 启动常驻监控。
+`--once` 只检查一轮；`simulate.py` 默认完全离线，不连接直播、不调用模型、不推送飞书，产物写入 `logs/simulation/`。可用 `--output-dir` 隔离测试目录；需要验证模型接口时显式运行 `simulate.py --use-llm`；`--daemon` 启动常驻监控。
 
 ## 配置
 
