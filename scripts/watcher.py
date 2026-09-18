@@ -611,7 +611,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--once", action="store_true")
     ap.add_argument("--daemon", action="store_true")
-    ap.add_argument("--interval", type=int, default=900)
+    ap.add_argument("--interval", type=int, default=600)
     ap.add_argument("--segment-seconds", type=int, default=900)
     ap.add_argument("--max-seconds", type=int, default=0)
     ap.add_argument("--health-interval", type=int, default=1800)

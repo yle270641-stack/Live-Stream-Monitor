@@ -70,8 +70,8 @@ def inspect_config(config, allow_placeholders=False):
         return ["配置根节点必须是 JSON 对象"], warnings
 
     anchors = config.get("anchors")
-    if not isinstance(anchors, list) or not anchors:
-        return ["anchors 必须是非空列表"], warnings
+    if not isinstance(anchors, list):
+        return ["anchors 必须是列表"], warnings
 
     seen = set()
     for index, anchor in enumerate(anchors, 1):
@@ -92,7 +92,9 @@ def inspect_config(config, allow_placeholders=False):
         if platform not in SUPPORTED_PLATFORMS:
             errors.append(f"{label}.platform 必须是 bilibili 或 douyin")
         required = (("mid", "room_id") if platform == "bilibili"
-                    else ("sec_uid",) if platform == "douyin" else ())
+                    else () if platform == "douyin" else ())
+        if platform == "douyin" and not str(anchor.get("sec_uid", "")).strip() and not str(anchor.get("uid", "")).strip():
+            errors.append(f"{label} 必须填写 uid 或 sec_uid")
         for field in required:
             value = str(anchor.get(field, "")).strip()
             if not value:

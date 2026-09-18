@@ -16,6 +16,25 @@ function Run-Python([string]$Script, [string[]]$Arguments) {
     $python = Require-Python
     if ($null -ne $python) { & $python $Script @Arguments; Wait-Cn }
 }
+function Manage-Anchors {
+    $python = Require-Python
+    if ($null -eq $python) { return }
+    $config = & $python -c "import json; print(json.dumps(json.load(open('config/anchors.json', encoding='utf-8-sig')).get('anchors', []), ensure_ascii=False))" | ConvertFrom-Json
+    Write-Host "当前主播：$(@($config).Count) 个"
+    if ($config) { @($config) | ForEach-Object { Write-Host "- $($_.id) | $($_.name) | $($_.platform)" } }
+    Write-Host 'a. 添加抖音主播（只需 UID）   d. 删除主播   q. 返回'
+    $action = Read-Host '请选择操作'
+    if ($action -eq 'a') {
+        $uid = Read-Host '请输入抖音主播 UID'
+        if ([string]::IsNullOrWhiteSpace($uid)) { Write-Host 'UID 不能为空。' -ForegroundColor Yellow; Wait-Cn; return }
+        $extra = @('--uid', $uid)
+        & $python 'scripts\manage_anchors.py' add @extra; Wait-Cn
+    } elseif ($action -eq 'd') {
+        $id = Read-Host '请输入要删除的主播 ID'
+        & $python 'scripts\manage_anchors.py' delete '--id' $id
+        Wait-Cn
+    }
+}
 function Show-Menu {
     Clear-Host
     Write-Host '========================================'
@@ -29,13 +48,14 @@ function Show-Menu {
     Write-Host '  6. 运行离线模拟'
     Write-Host '  7. 运行日终摘要模拟'
     Write-Host '  8. 查看最近日志'
-    Write-Host '  9. 退出'
+    Write-Host '  9. 管理主播（添加/删除）'
+    Write-Host '  0. 退出'
     Write-Host '========================================'
 }
 
 while ($true) {
     Show-Menu
-    $choice = Read-Host '请选择 [1-9]'
+    $choice = Read-Host '请选择 [0-9]'
     if ([string]::IsNullOrWhiteSpace($choice)) { break }
     switch ($choice) {
         '1' {
@@ -59,7 +79,8 @@ while ($true) {
         '6' { Run-Python 'scripts\simulate.py' @('--dry-run','--no-push') }
         '7' { Run-Python 'scripts\daily_summary.py' @('--dry-run','--simulate','--no-push') }
         '8' { if (Test-Path -LiteralPath 'logs') { Get-ChildItem logs -File -Recurse | Sort-Object LastWriteTime -Descending | Select-Object -First 20 | Format-Table LastWriteTime,FullName -AutoSize } else { Write-Host '日志目录不存在。' }; Wait-Cn }
-        '9' { break }
+        '9' { Manage-Anchors }
+        '0' { break }
         default { Write-Host '无效选择，请输入 1 到 9。' -ForegroundColor Yellow; Start-Sleep -Milliseconds 700 }
     }
 }

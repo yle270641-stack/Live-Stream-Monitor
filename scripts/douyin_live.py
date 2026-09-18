@@ -16,6 +16,7 @@ from common import ROOT, get_anchor, load_config, out_json
 
 
 LIVE_RE = re.compile(r"https?://live\.douyin\.com/(\d+)")
+USER_RE = re.compile(r"/user/([A-Za-z0-9_-]+)")
 LOCK_PATH = ROOT / "logs" / "douyin_browser.lock"
 
 
@@ -71,9 +72,17 @@ def browser_context(playwright):
 
 
 def find_live_url(page, anchor):
-    page.goto("https://www.douyin.com/user/" + anchor["sec_uid"],
+    user_key = anchor.get("sec_uid") or anchor.get("uid")
+    page.goto("https://www.douyin.com/user/" + user_key,
               wait_until="domcontentloaded", timeout=60000)
     page.wait_for_timeout(5000)
+    match = USER_RE.search(page.url)
+    if match and match.group(1) != anchor.get("sec_uid"):
+        anchor["sec_uid"] = match.group(1)
+        if anchor.get("name") in (None, "", anchor.get("uid")):
+            title = page.title().strip()
+            if title:
+                anchor["name"] = title.split("-")[0].strip()
     links = page.locator("a").evaluate_all("els => els.map(x => x.href).filter(Boolean)")
     for href in links:
         m = LIVE_RE.search(href)
@@ -93,7 +102,7 @@ def status(anchor):
             context = browser_context(p)
             page = context.pages[0] if context.pages else context.new_page()
             live_url = find_live_url(page, anchor)
-            return {"id": anchor["id"], "name": anchor["name"],
+            return {"id": anchor["id"], "name": anchor.get("name") or anchor.get("uid"),
                     "is_live": bool(live_url), "live_url": live_url}
         finally:
             if context is not None:
