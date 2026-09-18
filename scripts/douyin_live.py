@@ -72,6 +72,21 @@ def browser_context(playwright):
 
 
 def find_live_url(page, anchor):
+    uid = str(anchor.get("uid", "")).strip()
+    if uid.isdigit():
+        live_url = "https://live.douyin.com/" + uid
+        streams = []
+        page.on("request", lambda request: streams.append(request.url)
+                if "douyincdn.com" in request.url and ".flv" in request.url.lower() else None)
+        page.goto(live_url, wait_until="domcontentloaded", timeout=60000)
+        page.wait_for_timeout(8000)
+        if streams:
+            anchor["live_stream_url"] = streams[0]
+            title = page.title().split("-")[0].strip()
+            if title and title != "抖音直播":
+                anchor["name"] = title
+            return live_url
+        return ""
     user_key = anchor.get("sec_uid") or anchor.get("uid")
     page.goto("https://www.douyin.com/user/" + user_key,
               wait_until="domcontentloaded", timeout=60000)
@@ -131,6 +146,9 @@ def stream(anchor):
                 if "douyincdn.com" in url and ".flv" in url.lower():
                     urls.append(url)
             page.on("request", on_request)
+            if anchor.get("live_stream_url"):
+                return {"id": anchor["id"], "is_live": True, "live_url": live_url,
+                        "chosen": {"url": anchor["live_stream_url"]}}
             page.goto(live_url, wait_until="domcontentloaded", timeout=60000)
             page.wait_for_timeout(12000)
             chosen = next(iter(dict.fromkeys(urls)), None)
