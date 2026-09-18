@@ -22,13 +22,22 @@ function Manage-Anchors {
     $config = & $python -c "import json; print(json.dumps(json.load(open('config/anchors.json', encoding='utf-8-sig')).get('anchors', []), ensure_ascii=False))" | ConvertFrom-Json
     Write-Host "当前主播：$(@($config).Count) 个"
     if ($config) { @($config) | ForEach-Object { Write-Host "- $($_.id) | $($_.name) | $($_.platform)" } }
-    Write-Host 'a. 添加抖音主播（只需 UID）   d. 删除主播   q. 返回'
+    Write-Host 'a. 添加抖音主播（只需 UID）'
+    Write-Host 'b. 添加 B 站主播（mid + room_id）'
+    Write-Host 'd. 删除主播   q. 返回'
     $action = Read-Host '请选择操作'
     if ($action -eq 'a') {
         $uid = Read-Host '请输入抖音主播 UID'
         if ([string]::IsNullOrWhiteSpace($uid)) { Write-Host 'UID 不能为空。' -ForegroundColor Yellow; Wait-Cn; return }
         $extra = @('--uid', $uid)
         & $python 'scripts\manage_anchors.py' add @extra; Wait-Cn
+    } elseif ($action -eq 'b') {
+        $mid = Read-Host '请输入 B 站用户 mid'
+        $room = Read-Host '请输入 B 站直播间 room_id'
+        $name = Read-Host '请输入主播名称'
+        if ([string]::IsNullOrWhiteSpace($mid) -or [string]::IsNullOrWhiteSpace($room)) { Write-Host 'mid 和 room_id 不能为空。' -ForegroundColor Yellow; Wait-Cn; return }
+        if ([string]::IsNullOrWhiteSpace($name)) { $name = "B站主播 $mid" }
+        & $python 'scripts\manage_anchors.py' add-bilibili --mid $mid --room-id $room --name $name; Wait-Cn
     } elseif ($action -eq 'd') {
         $id = Read-Host '请输入要删除的主播 ID'
         & $python 'scripts\manage_anchors.py' delete '--id' $id
