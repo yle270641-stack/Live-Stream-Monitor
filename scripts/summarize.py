@@ -1,0 +1,214 @@
+# -*- coding: utf-8 -*-
+"""Turn a transcript into a five-part live-stream brief.
+
+Uses an OpenAI-compatible chat endpoint when LLM_API_KEY is configured;
+otherwise emits a conservative transcript-based fallback.
+"""
+import argparse
+import json
+import os
+import re
+import time
+import urllib.request
+from pathlib import Path
+
+from common import ROOT
+
+
+# 逐字稿行首时间戳，兼容 [HH:MM:SS] 和 [MM:SS]
+_TS_LINE = re.compile(r'^\[(?:(\d{2}):)?(\d{2}):(\d{2})\]\s*(.*)$')
+# 整句只有语气词的无意义行
+_FILLER_LINE = re.compile(r'^[嗯啊呃哦呀哈哎嘿吧嘛呢啦哟诶欸喂噢喔\s，。？！,.?!~、…\-]+$')
+# 连续叠字/叠词（能嘛能嘛能嘛、过过过）
+_REPEAT = re.compile(r'(.{1,3}?)\1{2,}')
+
+
+def compact_transcript(text, ts_gap_seconds=30, max_chars=300):
+    """压缩逐字稿以降低 LLM 输入成本：稀疏化时间戳（默认每30秒一个）、合并碎片短句、
+    去语气词行和叠字。实测可减少 45%-60% 字符。无法识别时间戳时安全回退原文。"""
+    lines = [x.strip() for x in text.splitlines() if x.strip()]
+    blocks = []
+    cur_ts, cur_text, last_sec = None, [], -10 ** 9
+    matched = 0
+
+    def flush():
+        if cur_text:
+            blocks.append((cur_ts, ''.join(cur_text)))
+
+    for line in lines:
+        m = _TS_LINE.match(line)
+        if not m:
+            if cur_text:
+                cur_text.append(line)
+            continue
+        matched += 1
+        h, mi, s, content = m.groups()
+        sec = (int(h) * 3600 if h else 0) + int(mi) * 60 + int(s)
+        content = content.strip()
+        if not content or _FILLER_LINE.match(content):
+            continue
+        content = _REPEAT.sub(r'\1', content)
+        new_window = (cur_ts is None or sec - last_sec >= ts_gap_seconds
+                      or sum(len(x) for x in cur_text) >= max_chars)
+        if new_window:
+            flush()
+            cur_ts = f"[{mi}:{s}]" if h is None else f"[{h}:{mi}:{s}]"
+            cur_text = [content]
+            last_sec = sec
+        else:
+            cur_text.append(content)
+    flush()
+    result = '\n'.join((f"{ts} {t}" if ts else t) for ts, t in blocks)
+    # 一行时间戳都没匹配上（异常格式），或内容全是语气词被过滤光时，回退原文，
+    # 避免丢内容或向下游 LLM 发送空请求（白花钱且可能报错）
+    if matched == 0 or not result.strip():
+        return text
+    return result
+
+
+def _env_int(name, default):
+    """读取整数型环境变量，非法/缺失时安全回退默认值，绝不让脏配置搞崩整段摘要。"""
+    try:
+        return int(os.getenv(name, str(default)))
+    except (TypeError, ValueError):
+        return default
+
+
+SYSTEM = """你是财经直播整理员。只依据逐字稿，不补充外部事实，不给买卖建议。
+请用连贯的段落式文字撰写一篇直播复盘，避免碎片化的短句罗列和 bullet point。整体结构如下：
+一、核心观点：用一段话概括本场直播的核心判断和主线逻辑
+二、大盘与仓位：连贯叙述主播对大盘走势、仓位控制的看法
+三、板块方向：连贯叙述看好和看空的板块及理由
+四、个股与操作：连贯叙述提到的个股和操作思路，关键处标注逐字稿时间点如[00:12:30]
+五、风险提示：连贯总结需要注意的风险
+每段以"一、核心观点"这样的中文序号加标题开头，另起一段写正文，用完整句子和自然的逻辑连接，不要用 markdown 标题、井号、编号列表或短句堆砌。如果逐字稿不完整或某些部分缺少明确论述，请基于已有内容尽量整理，不要拒绝输出，缺少的部分简要说明即可。末尾另起一行加：仅作客观转述，不构成投资建议。"""
+
+
+def load_dotenv():
+    """Load simple KEY=VALUE entries without requiring python-dotenv."""
+    env_path = ROOT / ".env"
+    if not env_path.exists():
+        return
+    for raw in env_path.read_text(encoding="utf-8-sig").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key, value = key.strip(), value.strip()
+        if value[:1] in {"'", '"'} and value[-1:] == value[:1]:
+            value = value[1:-1]
+        if key and key not in os.environ:
+            os.environ[key] = value
+
+
+def fallback(text):
+    lines = [x.strip() for x in text.splitlines() if x.strip()]
+    excerpt = "\n".join(lines[:12]) if lines else "逐字稿为空或未提供。"
+    return ("1. 一句话核心观点\n未配置模型，以下为逐字稿摘录。\n\n"
+            "2. 大盘/仓位判断\n待人工从逐字稿核对。\n\n"
+            "3. 看好与看空板块\n待人工从逐字稿核对。\n\n"
+            "4. 提到的个股与操作\n待人工从逐字稿核对。\n\n"
+            "5. 风险提示\n请以原始逐字稿为准。\n\n"
+            "逐字稿摘录：\n" + excerpt +
+            "\n\n仅作客观转述，不构成投资建议。")
+
+
+def api_summary(text, max_retries=None, system_prompt=None):
+    key = os.getenv("LLM_API_KEY", "")
+    if not key:
+        return fallback(text)
+    if max_retries is None:
+        # 中转站走 Cloudflare，国内直连会间歇性 502/503/超时，默认重试 6 次
+        max_retries = _env_int("LLM_MAX_RETRIES", 6)
+    endpoint = os.getenv("LLM_BASE_URL", "https://api.openai.com/v1/chat/completions").strip().rstrip("/")
+    # Accept a provider's root URL, /v1 base URL, or a full endpoint.
+    if not endpoint.endswith("/chat/completions"):
+        endpoint += "/v1/chat/completions" if not endpoint.endswith("/v1") else "/chat/completions"
+    model = os.getenv("LLM_MODEL", "gpt-4o-mini")
+    payload = {"model": model, "temperature": 0.1,
+               "max_tokens": _env_int("LLM_MAX_TOKENS", 2600),
+               "messages": [{"role": "system", "content": system_prompt or SYSTEM},
+                            {"role": "user", "content": text}]}
+    # 推理模型（grok/o 系列等）可通过 LLM_REASONING_EFFORT=low 压缩思维链 token，显著省钱；非推理模型留空即可
+    effort = os.getenv("LLM_REASONING_EFFORT", "").strip()
+    if effort:
+        payload["reasoning_effort"] = effort
+    last_exc = None
+    # 国内直连 Cloudflare 常出现连续几次坏路由后恢复，退避间隔拉长：10s/20s/30s/45s/60s/90s…
+    delays = [10, 20, 30, 45, 60, 90, 120]
+    for attempt in range(max_retries):
+        try:
+            req = urllib.request.Request(endpoint, data=json.dumps(payload).encode(),
+                headers={"Content-Type": "application/json",
+                         "Authorization": "Bearer " + key,
+                         "Connection": "close"})
+            # 单次请求超时 120s：挂起时快速失败进入下一轮重试，总预算约 6×120s+退避 < 1200s
+            with urllib.request.urlopen(req, timeout=120) as r:
+                data = json.loads(r.read().decode("utf-8"))
+            if "error" in data:
+                raise RuntimeError("模型接口返回错误: " + json.dumps(data["error"], ensure_ascii=False))
+            if not data.get("choices"):
+                raise RuntimeError("模型接口返回中没有 choices 字段")
+            content = data["choices"][0]["message"]["content"].strip()
+            if not content:
+                raise RuntimeError("模型返回空内容（可能被限流或输出异常），将重试")
+            if attempt:
+                print(f"[summarize] 第{attempt + 1}次尝试成功", flush=True)
+            return content
+        except urllib.error.HTTPError as exc:
+            # 4xx 错误（除 429 限流外）不可重试，立即失败避免浪费时间
+            if 400 <= exc.code < 500 and exc.code != 429:
+                raise RuntimeError(f"模型接口返回 HTTP {exc.code}: {exc.reason}") from exc
+            print(f"[summarize] 第{attempt + 1}/{max_retries}次失败：HTTP {exc.code} {exc.reason}", flush=True)
+            last_exc = exc
+        except Exception as exc:
+            print(f"[summarize] 第{attempt + 1}/{max_retries}次失败：{type(exc).__name__}: {str(exc)[:120]}", flush=True)
+            last_exc = exc
+        if attempt < max_retries - 1:
+            delay = delays[min(attempt, len(delays) - 1)]
+            print(f"[summarize] {delay}s 后重试…", flush=True)
+            time.sleep(delay)  # 长退避，等待坏路由/服务端故障恢复
+    raise RuntimeError(
+        f"模型接口请求失败（已重试{max_retries}次），请检查 LLM_BASE_URL、网络和 Key（当前地址：{endpoint}）: {last_exc}"
+    ) from last_exc
+
+
+def summarize_text(text):
+    """先压缩逐字稿（稀疏时间戳/去口头禅/合并碎片句），再分块摘要、合并。"""
+    text = compact_transcript(text)
+    # grok 速度快，单块放大到 6000 字符以减少分块次数（每多一块就多一次重复 system 开销）；
+    # 仍保留上限避免超过中转站单请求时长限制
+    chunk_limit = _env_int("LLM_CHUNK_LIMIT", 6000)
+    merge_limit = 9000
+    if len(text) <= chunk_limit:
+        return api_summary(text)
+    chunks = [text[i:i + chunk_limit] for i in range(0, len(text), chunk_limit)]
+    notes = []
+    for i, chunk in enumerate(chunks, 1):
+        notes.append(f"第{i}段逐字稿摘要：\n{api_summary(chunk)}")
+    merged = "\n\n".join(notes)
+    if len(merged) > merge_limit:
+        merged = merged[:merge_limit]
+    return api_summary("以下是同一场直播按时间切分后的阶段摘要，请合并为最终五段式摘要。\n\n" + merged)
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--transcript", required=True)
+    ap.add_argument("--out", default="")
+    args = ap.parse_args()
+    p = Path(args.transcript)
+    if not p.is_absolute():
+        p = (ROOT / p).resolve()
+    load_dotenv()
+    result = summarize_text(p.read_text(encoding="utf-8"))
+    out = Path(args.out) if args.out else p.with_suffix(".summary.txt")
+    if not out.is_absolute():
+        out = (ROOT / out).resolve()
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(result, encoding="utf-8")
+    print(json.dumps({"ok": True, "summary_path": str(out), "chars": len(result)}, ensure_ascii=False))
+
+
+if __name__ == "__main__":
+    main()

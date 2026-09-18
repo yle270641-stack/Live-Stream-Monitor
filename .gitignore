@@ -1,0 +1,18 @@
+# 产物目录（保留目录、忽略内容）
+recordings/*
+transcripts/*
+logs/*
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Playwright 持久化登录 profile（含登录态，绝不提交）
+browser_profile/
+.profile/
+
+# 密钥 / 真实配置（anchors.json 含飞书 webhook，用 anchors.example.json 做模板）
+.env
+config/anchors.json
