@@ -18,6 +18,12 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+      - name: Install development tools
+        run: python -m pip install -r requirements-dev.txt
+      - name: Validate public configuration
+        run: python scripts/check_config.py --config config/anchors.example.json --allow-placeholders --skip-tools
+      - name: Lint sources
+        run: python -m ruff check scripts tests
       - name: Compile sources
         run: python -m compileall -q scripts tests
       - name: Run unit tests

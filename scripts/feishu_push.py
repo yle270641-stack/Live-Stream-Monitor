@@ -11,7 +11,7 @@ import urllib.request
 from datetime import datetime
 from pathlib import Path
 
-from common import load_config, ROOT, ensure_dirs, log
+from common import ROOT, ensure_dirs, load_config
 
 
 def post_text(webhook, text):

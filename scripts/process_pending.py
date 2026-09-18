@@ -5,11 +5,8 @@ import argparse
 import subprocess
 import sys
 import time
-import ctypes
-from ctypes import wintypes
 from datetime import datetime
-from pathlib import Path
-from common import ROOT, load_config, get_anchor, extract_json, cleanup_source_files
+from common import ROOT, cleanup_source_files, extract_json, load_config
 
 LOCK_PATH = ROOT / "logs" / "process_pending.lock"
 _LOCK_HANDLE = None

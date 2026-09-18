@@ -2,12 +2,14 @@
 """公共工具：路径、配置、外部命令、JSON 提取、日志。仅用标准库。"""
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
 import glob
 from datetime import datetime
 from pathlib import Path
+from urllib.parse import urlparse
 
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG_PATH = ROOT / "config" / "anchors.json"
@@ -16,12 +18,28 @@ UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/124.0 Safari/537.36")
 
 SUBDIRS = ["scripts", "config", "recordings", "transcripts", "logs", "logs/commands"]
+SUPPORTED_PLATFORMS = {"bilibili", "douyin"}
+ANCHOR_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
+TIME_RE = re.compile(r"^(?:[01]\d|2[0-3]):[0-5]\d$")
 
 
 def ensure_dirs():
     for d in SUBDIRS:
         (ROOT / d).mkdir(parents=True, exist_ok=True)
     return {d: ROOT / d for d in SUBDIRS}
+
+
+def configure_utf8_stdio():
+    """Use deterministic UTF-8 output for Windows pipes, logs, and terminals."""
+    import io
+    if hasattr(sys.stdout, "buffer"):
+        sys.stdout = io.TextIOWrapper(
+            sys.stdout.buffer, encoding="utf-8", errors="replace", line_buffering=True
+        )
+    if hasattr(sys.stderr, "buffer"):
+        sys.stderr = io.TextIOWrapper(
+            sys.stderr.buffer, encoding="utf-8", errors="replace", line_buffering=True
+        )
 
 
 def load_config():
@@ -32,12 +50,105 @@ def load_config():
         )
     with open(CONFIG_PATH, "r", encoding="utf-8") as f:
         config = json.load(f)
+    if not isinstance(config, dict):
+        raise ValueError("配置无效：配置根节点必须是 JSON 对象")
     if not isinstance(config.get("anchors"), list):
         raise ValueError("config/anchors.json 中的 anchors 必须是列表。")
     webhook = os.getenv("FEISHU_WEBHOOK", "").strip()
     if webhook:
         config["feishu_webhook"] = webhook
+    errors, _ = inspect_config(config)
+    if errors:
+        raise ValueError("配置无效：\n- " + "\n- ".join(errors))
     return config
+
+
+def inspect_config(config, allow_placeholders=False):
+    """Return configuration errors and warnings without exposing secret values."""
+    errors, warnings = [], []
+    if not isinstance(config, dict):
+        return ["配置根节点必须是 JSON 对象"], warnings
+
+    anchors = config.get("anchors")
+    if not isinstance(anchors, list) or not anchors:
+        return ["anchors 必须是非空列表"], warnings
+
+    seen = set()
+    for index, anchor in enumerate(anchors, 1):
+        label = f"anchors[{index}]"
+        if not isinstance(anchor, dict):
+            errors.append(f"{label} 必须是对象")
+            continue
+        anchor_id = str(anchor.get("id", "")).strip()
+        if not ANCHOR_ID_RE.fullmatch(anchor_id):
+            errors.append(f"{label}.id 只能包含英文字母、数字、下划线和连字符")
+        elif anchor_id in seen:
+            errors.append(f"主播 id 重复：{anchor_id}")
+        seen.add(anchor_id)
+        if not str(anchor.get("name", "")).strip():
+            errors.append(f"{label}.name 不能为空")
+
+        platform = anchor.get("platform")
+        if platform not in SUPPORTED_PLATFORMS:
+            errors.append(f"{label}.platform 必须是 bilibili 或 douyin")
+        required = (("mid", "room_id") if platform == "bilibili"
+                    else ("sec_uid",) if platform == "douyin" else ())
+        for field in required:
+            value = str(anchor.get(field, "")).strip()
+            if not value:
+                errors.append(f"{label}.{field} 不能为空")
+            elif not allow_placeholders and value.startswith("替换为"):
+                errors.append(f"{label}.{field} 仍是示例占位符")
+        if platform == "bilibili":
+            for field in ("mid", "room_id"):
+                value = str(anchor.get(field, "")).strip()
+                if value and not value.startswith("替换为") and not value.isdigit():
+                    errors.append(f"{label}.{field} 必须是数字")
+
+        windows = anchor.get("poll_windows")
+        if not isinstance(windows, list) or not windows:
+            errors.append(f"{label}.poll_windows 必须是非空列表")
+        else:
+            for window_index, window in enumerate(windows, 1):
+                valid = (isinstance(window, list) and len(window) == 2
+                         and all(isinstance(x, str) and TIME_RE.fullmatch(x) for x in window))
+                if not valid:
+                    errors.append(
+                        f"{label}.poll_windows[{window_index}] 必须是 [\"HH:MM\", \"HH:MM\"]"
+                    )
+
+    webhook = str(config.get("feishu_webhook", "")).strip()
+    if webhook:
+        parsed = urlparse(webhook)
+        if parsed.scheme != "https" or not parsed.netloc:
+            errors.append("feishu_webhook 必须是有效的 HTTPS URL")
+    else:
+        warnings.append("未配置 FEISHU_WEBHOOK；摘要会保存在本地但不会推送")
+
+    retention = config.get("retention_days", 7)
+    if not isinstance(retention, int) or isinstance(retention, bool) or retention < 1:
+        errors.append("retention_days 必须是大于等于 1 的整数")
+    return errors, warnings
+
+
+def time_in_windows(current, windows):
+    """Return whether HH:MM is inside normal or cross-midnight time windows."""
+    current_minutes = _time_minutes(current)
+    for start, end in windows:
+        start_minutes, end_minutes = _time_minutes(start), _time_minutes(end)
+        if start_minutes <= end_minutes:
+            if start_minutes <= current_minutes <= end_minutes:
+                return True
+        elif current_minutes >= start_minutes or current_minutes <= end_minutes:
+            return True
+    return False
+
+
+def _time_minutes(value):
+    if not isinstance(value, str) or not TIME_RE.fullmatch(value):
+        raise ValueError(f"非法时间：{value!r}，应为 HH:MM")
+    hour, minute = value.split(":")
+    return int(hour) * 60 + int(minute)
 
 
 def load_dotenv():

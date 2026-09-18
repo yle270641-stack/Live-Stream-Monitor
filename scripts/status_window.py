@@ -1,8 +1,6 @@
 # -*- coding: utf-8 -*-
 """Small always-on-top local status window for the live watcher."""
 import json
-import subprocess
-import sys
 import tkinter as tk
 import ctypes
 import time

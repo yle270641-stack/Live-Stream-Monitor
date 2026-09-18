@@ -13,7 +13,8 @@ from ctypes import wintypes
 from datetime import datetime
 from pathlib import Path
 
-from common import ROOT, load_config, ensure_dirs, log, extract_json, cleanup_source_files
+from common import (ROOT, cleanup_source_files, ensure_dirs, extract_json, load_config,
+                    log, time_in_windows)
 from daily_summary import scheduler as daily_summary_scheduler
 
 STATE_PATH = ROOT / "logs" / "state.json"
@@ -244,7 +245,7 @@ def push_feishu(title, body):
 
 def in_window(anchor):
     now = datetime.now().strftime("%H:%M")
-    return any(start <= now <= end for start, end in anchor.get("poll_windows", []))
+    return time_in_windows(now, anchor.get("poll_windows", []))
 
 
 def get_stream(anchor):
@@ -557,7 +558,6 @@ def hotkey_worker(active, lock, stop):
         log("F9 快捷键注册失败，可能已被其他程序占用")
         return
     WM_HOTKEY = 0x0312
-    WM_QUIT = 0x0012
     msg = wintypes.MSG()
     try:
         while not stop.is_set():

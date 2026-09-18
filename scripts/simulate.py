@@ -1,16 +1,16 @@
 # -*- coding: utf-8 -*-
 """Run a safe local end-to-end simulation without touching live streams.
 
-The simulation uses a fixture transcript and the configured LLM endpoint.
-It never uploads audio and never sends a Feishu message.
+The simulation uses a fixture transcript and is fully offline by default.
+It never uploads audio or sends a Feishu message. Passing --use-llm explicitly
+allows the configured summary endpoint to process the synthetic fixture.
 """
 import argparse
 import json
+import os
 from datetime import datetime
-from pathlib import Path
-
-from common import ROOT
-from summarize import load_dotenv, summarize_text
+from common import ROOT, configure_utf8_stdio, load_dotenv
+from summarize import summarize_text
 
 
 FIXTURE = """[00:01] 主播：今天大盘高开后震荡，指数没有形成明确突破，整体仓位建议控制在三成以内。
@@ -21,10 +21,15 @@ FIXTURE = """[00:01] 主播：今天大盘高开后震荡，指数没有形成�
 
 
 def main():
+    configure_utf8_stdio()
     ap = argparse.ArgumentParser()
     ap.add_argument("--keep-transcript", action="store_true")
+    ap.add_argument("--use-llm", action="store_true",
+                    help="允许把内置虚构逐字稿发送到已配置的 LLM 接口")
     args = ap.parse_args()
     load_dotenv()
+    if not args.use_llm:
+        os.environ.pop("LLM_API_KEY", None)
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     transcript = ROOT / "transcripts" / f"simulation_{stamp}.txt"
     summary = ROOT / "logs" / f"simulation_{stamp}_summary.txt"
@@ -35,7 +40,8 @@ def main():
     summary.write_text(result, encoding="utf-8")
     if not args.keep_transcript:
         transcript.unlink(missing_ok=True)
-    print(json.dumps({"ok": True, "summary_path": str(summary),
+    print(json.dumps({"ok": True, "mode": "llm" if args.use_llm else "offline",
+                      "summary_path": str(summary),
                       "transcript_kept": args.keep_transcript}, ensure_ascii=False, indent=2))
     print("\n" + result)
 

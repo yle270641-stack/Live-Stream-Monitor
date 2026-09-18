@@ -12,8 +12,8 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-from common import ROOT, load_config, ensure_dirs, log
-from summarize import api_summary, load_dotenv
+from common import ROOT, ensure_dirs, load_config, load_dotenv, log
+from summarize import api_summary
 
 STATE_PATH = ROOT / "logs" / "daily_summary_state.json"
 OUTPUT_ROOT = ROOT / "transcripts" / "daily"

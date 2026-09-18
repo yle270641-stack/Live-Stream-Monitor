@@ -12,7 +12,7 @@ import time
 import urllib.request
 from pathlib import Path
 
-from common import ROOT
+from common import ROOT, load_dotenv
 
 
 # 逐字稿行首时间戳，兼容 [HH:MM:SS] 和 [MM:SS]
@@ -82,23 +82,6 @@ SYSTEM = """你是财经直播整理员。只依据逐字稿，不补充外部�
 四、个股与操作：连贯叙述提到的个股和操作思路，关键处标注逐字稿时间点如[00:12:30]
 五、风险提示：连贯总结需要注意的风险
 每段以"一、核心观点"这样的中文序号加标题开头，另起一段写正文，用完整句子和自然的逻辑连接，不要用 markdown 标题、井号、编号列表或短句堆砌。如果逐字稿不完整或某些部分缺少明确论述，请基于已有内容尽量整理，不要拒绝输出，缺少的部分简要说明即可。末尾另起一行加：仅作客观转述，不构成投资建议。"""
-
-
-def load_dotenv():
-    """Load simple KEY=VALUE entries without requiring python-dotenv."""
-    env_path = ROOT / ".env"
-    if not env_path.exists():
-        return
-    for raw in env_path.read_text(encoding="utf-8-sig").splitlines():
-        line = raw.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, value = line.split("=", 1)
-        key, value = key.strip(), value.strip()
-        if value[:1] in {"'", '"'} and value[-1:] == value[:1]:
-            value = value[1:-1]
-        if key and key not in os.environ:
-            os.environ[key] = value
 
 
 def fallback(text):

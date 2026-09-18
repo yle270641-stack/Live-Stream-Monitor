@@ -37,21 +37,29 @@ Copy-Item .env.example .env
 1. 选择 `1` 创建虚拟环境并安装依赖。
 2. 如使用 NVIDIA GPU，可选择 `2` 安装 CUDA Python 运行库，并在 `.env` 设置 `WHISPER_DEVICE=cuda`、`WHISPER_COMPUTE_TYPE=float16`。
 3. 使用抖音时选择 `3`，扫码登录后关闭浏览器。
-4. 双击 `启动直播监控.bat` 启动常驻监控。
+4. 选择 `5` 检查配置、主播字段和 FFmpeg 是否可用。
+5. 双击 `启动直播监控.bat` 启动常驻监控。
 
 也可以直接运行：
 
 ```powershell
 .\.venv\Scripts\python.exe scripts\watcher.py --once
 .\.venv\Scripts\python.exe scripts\simulate.py
+.\.venv\Scripts\python.exe scripts\check_config.py
 .\.venv\Scripts\python.exe scripts\watcher.py --daemon
 ```
 
-`--once` 只检查一轮；`simulate.py` 不连接直播、不推送飞书，适合验证摘要配置；`--daemon` 启动常驻监控。
+`--once` 只检查一轮；`simulate.py` 默认完全离线，不连接直播、不调用模型、不推送飞书。需要验证模型接口时显式运行 `simulate.py --use-llm`；`--daemon` 启动常驻监控。
 
 ## 配置
 
-真实配置文件为 `config/anchors.json`，格式参考 `config/anchors.example.json`。`tools.ffmpeg` 和 `tools.ffprobe` 默认从 `PATH` 解析，也可以改为本机绝对路径。
+真实配置文件为 `config/anchors.json`，格式参考 `config/anchors.example.json`。`tools.ffmpeg` 和 `tools.ffprobe` 默认从 `PATH` 解析，也可以改为本机绝对路径。监控时间使用本机时区，支持跨午夜窗口，例如 `["23:00", "01:00"]`。
+
+修改配置后建议先离线检查；该命令不会访问直播平台、模型接口或飞书：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\check_config.py
+```
 
 常用环境变量：
 
@@ -81,9 +89,11 @@ Copy-Item .env.example .env
 ```powershell
 .\.venv\Scripts\python.exe -m compileall -q scripts tests
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
+.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+.\.venv\Scripts\python.exe -m ruff check scripts tests
 ```
 
-GitHub Actions 会在 Python 3.11 和 3.12 上执行同样的静态编译与单元测试。
+GitHub Actions 会在 Python 3.11 和 3.12 上检查公开示例配置、执行静态检查、编译和单元测试。
 
 ## 许可证
 

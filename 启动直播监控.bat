@@ -1,5 +1,6 @@
 @echo off
 setlocal
+chcp 65001 >nul
 cd /d "%~dp0"
 if not exist "config\anchors.json" (
   echo Missing config\anchors.json. Copy config\anchors.example.json and configure it first.
