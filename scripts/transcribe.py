@@ -5,6 +5,7 @@ import json
 import os
 import sys
 import site
+import shutil
 from pathlib import Path
 
 from common import ROOT, log, ensure_dirs, load_dotenv
@@ -24,14 +25,35 @@ def format_ts(seconds):
     return f"{h:02d}:{m:02d}:{s:02d}"
 
 
+def detect_device():
+    """Return (device, compute_type, reason) for automatic local inference."""
+    override = os.getenv("WHISPER_DEVICE", "auto").strip().lower()
+    if override in {"cpu", "cuda"}:
+        compute = os.getenv("WHISPER_COMPUTE_TYPE", "").strip()
+        return override, compute or ("float16" if override == "cuda" else "int8"), "configured"
+
+    # faster-whisper uses CTranslate2; its device count is more reliable than
+    # merely finding nvidia-smi because the installed wheel may not include CUDA.
+    cuda_count = 0
+    try:
+        import ctranslate2
+        cuda_count = int(ctranslate2.get_cuda_device_count())
+    except (ImportError, AttributeError, RuntimeError, OSError, ValueError):
+        pass
+    if cuda_count > 0:
+        return "cuda", os.getenv("WHISPER_COMPUTE_TYPE", "").strip() or "float16", "cuda_detected"
+    if shutil.which("nvidia-smi"):
+        return "cpu", os.getenv("WHISPER_COMPUTE_TYPE", "").strip() or "int8", "nvidia_gpu_unavailable_to_runtime"
+    return "cpu", os.getenv("WHISPER_COMPUTE_TYPE", "").strip() or "int8", "cpu_only"
+
+
 def transcribe(audio, out_dir):
     try:
         from faster_whisper import WhisperModel
     except ImportError:
         fail("faster_whisper_not_installed", hint="运行 安装依赖.bat")
     model_name = os.getenv("WHISPER_MODEL", "small")
-    device = os.getenv("WHISPER_DEVICE", "cpu")
-    compute_type = os.getenv("WHISPER_COMPUTE_TYPE", "int8" if device == "cpu" else "float16")
+    device, compute_type, detection_reason = detect_device()
     language = os.getenv("WHISPER_LANGUAGE", "zh") or None
     if device == "cuda":
         # NVIDIA pip packages install runtime DLLs outside PATH on Windows.
@@ -42,7 +64,7 @@ def transcribe(audio, out_dir):
                 if dll_dir.exists():
                     os.add_dll_directory(str(dll_dir))
                     os.environ["PATH"] = str(dll_dir) + os.pathsep + os.environ.get("PATH", "")
-    log(f"加载本地语音模型 {model_name} ({device}/{compute_type})，首次运行会下载模型")
+    log(f"加载本地语音模型 {model_name} ({device}/{compute_type}，{detection_reason})，首次运行会下载模型")
     try:
         model = WhisperModel(model_name, device=device, compute_type=compute_type)
         segments, info = model.transcribe(str(audio), language=language, vad_filter=True,
@@ -57,7 +79,8 @@ def transcribe(audio, out_dir):
         hint = ""
         if device == "cuda":
             hint = "CUDA 模式需要 NVIDIA CUDA 运行库（cuBLAS/cuDNN）；请运行 安装CUDA依赖.bat"
-        fail("local_transcription_failed", error=str(exc), model=model_name, hint=hint)
+        fail("local_transcription_failed", error=str(exc), model=model_name,
+             device=device, compute_type=compute_type, hint=hint)
     if not lines:
         fail("empty_transcript", audio=str(audio), model=model_name)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -91,7 +114,8 @@ def main():
     print(json.dumps({"ok": True, "audio": str(audio), "transcript_path": str(transcript),
                       "chars": len(text), "language": getattr(info, "language", "zh"),
                       "duration_s": getattr(info, "duration", None),
-                      "backend": "faster-whisper"}, ensure_ascii=False, indent=2))
+                      "backend": "faster-whisper", "device": detect_device()[0]},
+                     ensure_ascii=False, indent=2))
 
 
 if __name__ == "__main__":

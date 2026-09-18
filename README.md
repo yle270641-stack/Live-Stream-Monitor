@@ -70,10 +70,10 @@ Copy-Item .env.example .env
 | `LLM_MODEL` | 摘要模型名 | `gpt-4o-mini` |
 | `FEISHU_WEBHOOK` | 飞书自定义机器人 Webhook | 空，不推送 |
 | `WHISPER_MODEL` | faster-whisper 模型 | `small` |
-| `WHISPER_DEVICE` | `cpu` 或 `cuda` | `cpu` |
+| `WHISPER_DEVICE` | `auto`、`cpu` 或 `cuda` | `auto`，自动检测可用 GPU |
 | `CLEANUP_AFTER_PUSH` | 推送成功后删除录音和逐字稿 | `true` |
 
-环境变量优先于配置文件中的飞书 Webhook。`.env`、真实主播配置、浏览器登录态、录音、逐字稿和日志均已被 `.gitignore` 排除。
+环境变量优先于配置文件中的飞书 Webhook。`WHISPER_DEVICE=auto` 会检查 CTranslate2 的 CUDA 能力；只有运行时确实可用时才使用 GPU，否则回退 CPU。显式设置 `cpu` 或 `cuda` 可覆盖自动判断。`.env`、真实主播配置、浏览器登录态、录音、逐字稿和日志均已被 `.gitignore` 排除。
 
 ## 数据目录
 
