@@ -15,6 +15,7 @@ browser_profile/
 
 # 密钥 / 真实配置（anchors.json 含飞书 webhook，用 anchors.example.json 做模板）
 .env
+!.env.example
 config/anchors.json
 
 # Test and editor artifacts

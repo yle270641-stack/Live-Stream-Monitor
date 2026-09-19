@@ -23,10 +23,13 @@
 
 ## 快速开始
 
+首次使用按下面顺序操作，整个流程可以先不配置任何密钥：
+
 ```powershell
 git clone <你的仓库地址>
 cd <仓库目录>
 Copy-Item config/anchors.example.json config/anchors.json
+# .env.example 是仓库内的公开模板；真实密钥只写入本地 .env
 Copy-Item .env.example .env
 ```
 
@@ -40,6 +43,8 @@ Copy-Item .env.example .env
 4. 选择 `5` 检查配置、主播字段和 FFmpeg 是否可用。
 5. 双击 `启动直播监控.bat` 启动常驻监控。
 
+如果只想确认环境是否正常，完成第 1、2 步后选择工具箱的 `5`（检查配置和运行环境），再选择 `6`（运行离线模拟）。离线模拟不会访问直播平台、模型接口或飞书，适合首次安装和提交 Issue 前自检。
+
 也可以直接运行：
 
 ```powershell
@@ -50,6 +55,15 @@ Copy-Item .env.example .env
 ```
 
 `--once` 只检查一轮；`simulate.py` 默认完全离线，不连接直播、不调用模型、不推送飞书，产物写入 `logs/simulation/`。可用 `--output-dir` 隔离测试目录；需要验证模型接口时显式运行 `simulate.py --use-llm`；`--daemon` 启动常驻监控。
+
+## 运行流程
+
+```text
+直播平台 -> 开播检测 -> FFmpeg 录音 -> faster-whisper 转写
+                                      -> 本地摘要 -> 可选飞书推送
+```
+
+录音、逐字稿、摘要和运行日志默认只写入本机。未配置模型密钥时仍会生成本地保守摘录；未配置飞书 Webhook 时不会发送网络请求。项目不会自动交易，也不会替你下单。
 
 ## 配置
 
@@ -83,6 +97,28 @@ Copy-Item .env.example .env
 - `browser_profile/`：抖音本地登录态
 
 以上目录可能含敏感内容，不应提交或分享。默认保留期由 `retention_days` 控制。
+
+## 常见问题
+
+- **检查提示缺少 FFmpeg**：安装 FFmpeg 后重新打开 PowerShell，确认 `ffmpeg -version` 和 `ffprobe -version` 可执行；也可以在 `config/anchors.json` 的 `tools` 中填写完整路径。
+- **抖音检测不到直播**：先在工具箱选择 `3` 完成扫码登录，再确认 `browser_profile/` 未被清理；该目录包含登录态，不要上传。
+- **没有飞书消息**：先查看 `logs/pending_push_*.txt` 和 `logs/errors.log`。Webhook 留空时，摘要只保存在 `transcripts/`，这是预期行为。
+- **模型下载或转写很慢**：首次运行会下载 faster-whisper 模型；可先将 `WHISPER_DEVICE=cpu`，确认流程后再安装 CUDA 组件。
+- **监控窗口反复重启**：查看 `logs/watcher_console.log` 和 `logs/state.json`，先运行工具箱的 `5` 检查配置，不要同时启动多个 watcher。
+
+## 项目结构
+
+| 路径 | 用途 |
+| --- | --- |
+| `scripts/watcher.py` | 常驻监控主程序 |
+| `scripts/check_config.py` | 不联网的配置和依赖检查 |
+| `scripts/simulate.py` | 不联网的端到端模拟 |
+| `scripts/manage_anchors.py` | 添加或删除主播配置 |
+| `config/anchors.example.json` | 可提交的主播配置模板 |
+| `.env.example` | 可提交的密钥和运行参数模板 |
+| `工具箱.bat` | Windows 菜单入口 |
+
+真实的 `.env`、`config/anchors.json`、浏览器登录态和运行产物均不会提交到 Git。
 
 ## 开发验证
 

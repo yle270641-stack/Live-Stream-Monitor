@@ -74,10 +74,17 @@ while ($true) {
                 if (-not (Test-Path -LiteralPath $python)) { py -3.11 -m venv .venv 2>$null }
             }
             if (Test-Path -LiteralPath $python) {
-                & $python -m pip install --upgrade pip
-                & $python -m pip install -r requirements.txt
-                & $python -m playwright install chromium
-                Write-Host '运行环境安装完成。' -ForegroundColor Green
+                try {
+                    & $python -m pip install --upgrade pip
+                    if ($LASTEXITCODE -ne 0) { throw 'pip 升级失败' }
+                    & $python -m pip install -r requirements.txt
+                    if ($LASTEXITCODE -ne 0) { throw '项目依赖安装失败' }
+                    & $python -m playwright install chromium
+                    if ($LASTEXITCODE -ne 0) { throw 'Playwright 浏览器安装失败' }
+                    Write-Host '运行环境安装完成。' -ForegroundColor Green
+                } catch {
+                    Write-Host "安装未完成：$($_.Exception.Message)" -ForegroundColor Red
+                }
             } else { Write-Host '未找到 Python 3.11 或 3.12。' -ForegroundColor Red }
             Wait-Cn
         }
@@ -85,11 +92,11 @@ while ($true) {
         '3' { Run-Python 'scripts\douyin_login.py' @() }
         '4' { $python = Require-Python; if ($null -ne $python) { $pythonw = Join-Path (Get-Location) '.venv\Scripts\pythonw.exe'; if (Test-Path $pythonw) { Start-Process $pythonw -ArgumentList 'scripts\status_window.py' } else { Start-Process $python -ArgumentList 'scripts\status_window.py' } } }
         '5' { Run-Python 'scripts\check_config.py' @() }
-        '6' { Run-Python 'scripts\simulate.py' @('--dry-run','--no-push') }
+        '6' { Run-Python 'scripts\simulate.py' @() }
         '7' { Run-Python 'scripts\daily_summary.py' @('--dry-run','--simulate','--no-push') }
         '8' { if (Test-Path -LiteralPath 'logs') { Get-ChildItem logs -File -Recurse | Sort-Object LastWriteTime -Descending | Select-Object -First 20 | Format-Table LastWriteTime,FullName -AutoSize } else { Write-Host '日志目录不存在。' }; Wait-Cn }
         '9' { Manage-Anchors }
         '0' { break }
-        default { Write-Host '无效选择，请输入 1 到 9。' -ForegroundColor Yellow; Start-Sleep -Milliseconds 700 }
+        default { Write-Host '无效选择，请输入 0 到 9。' -ForegroundColor Yellow; Start-Sleep -Milliseconds 700 }
     }
 }

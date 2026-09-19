@@ -19,7 +19,7 @@ if exist "logs\watcher_console.log" (
     move /y "logs\watcher_console.log" "logs\watcher_console.old.log" >nul
   )
 )
-echo Starting live watcher. Keep this window open.
+echo Starting live watcher. Keep this window open. Log: logs\watcher_console.log
 if exist ".venv\Scripts\pythonw.exe" start "Live monitor status" ".venv\Scripts\pythonw.exe" "scripts\status_window.py"
 :run
 ".venv\Scripts\python.exe" scripts\watcher.py --daemon >> logs\watcher_console.log 2>&1
