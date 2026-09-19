@@ -1,6 +1,6 @@
 # 直播监控
 
-一个在 Windows 本机运行的直播音频监控与摘要工具。它可按时间窗口检查抖音和 Bilibili 直播，使用 FFmpeg 录制音频，通过 faster-whisper 本地转写，调用 OpenAI 兼容接口生成摘要，并可推送到飞书群机器人。
+一个在 Windows 本机运行的直播音频监控与摘要工具。它可按时间窗口检查抖音和 Bilibili 直播，使用 FFmpeg 录制音频，通过 faster-whisper 本地转写，调用可配置的大模型接口生成摘要，并可推送到飞书群机器人。
 
 > 本项目仅用于处理你有权访问和录制的内容。使用前请遵守直播平台条款、著作权规则和所在地法律。生成的财经摘要仅作客观转述，不构成投资建议。
 
@@ -10,7 +10,7 @@
 - 抖音 Playwright 本地登录、开播检测与临时流地址捕获
 - FFmpeg 分段录音，支持断流恢复和 `F9` 提前结束当前片段
 - faster-whisper 本地转写，音频无需上传到第三方 ASR
-- OpenAI 兼容接口生成五段式摘要，无 Key 时生成保守摘录
+- 可配置的大模型接口生成五段式摘要，无密钥时生成保守摘录
 - 飞书机器人推送、失败重试、运行心跳和本地产物清理
 
 ## 环境要求
@@ -79,9 +79,9 @@ Copy-Item .env.example .env
 
 | 变量 | 用途 | 默认值 |
 | --- | --- | --- |
-| `LLM_API_KEY` | OpenAI 兼容接口密钥 | 空，使用本地摘录 |
-| `LLM_BASE_URL` | Chat Completions 接口或 API 根地址 | OpenAI 接口 |
-| `LLM_MODEL` | 摘要模型名 | `gpt-4o-mini` |
+| `LLM_API_KEY` | 模型接口密钥（按服务商要求填写） | 空，使用本地摘录 |
+| `LLM_BASE_URL` | Chat Completions 接口或 API 根地址 | 服务商接口地址 |
+| `LLM_MODEL` | 摘要模型名 | 服务商支持的模型 |
 | `FEISHU_WEBHOOK` | 飞书自定义机器人 Webhook | 空，不推送 |
 | `WHISPER_MODEL` | faster-whisper 模型 | `small` |
 | `WHISPER_DEVICE` | `auto`、`cpu` 或 `cuda` | `auto`，自动检测可用 GPU |
